@@ -2,15 +2,15 @@ package es.esteban.process_log;
 
 public class TiempoMedio
 {
-    private int ocurrencias;
-    private int tiempoTotal;
-    private int maxTiempo = 0;
+    private int  ocurrencias;
+    private int  tiempoTotal;
+    private long maxTiempo = 0;
 
     public TiempoMedio()
     {
     }
 
-    public void addTiempoSegundos(int segundos)
+    public void addTiempoSegundos(long segundos)
     {
         ocurrencias++;
         tiempoTotal += segundos;

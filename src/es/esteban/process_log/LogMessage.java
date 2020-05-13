@@ -1,5 +1,7 @@
 package es.esteban.process_log;
 
+import java.time.LocalDateTime;
+
 public class LogMessage
 {
     public enum EVENT
@@ -7,13 +9,15 @@ public class LogMessage
         NULL_EVENT, SENT_TO_JMS, RECEIVED_FROM_JMS, SENT_TO_GOOGLE, OK_FROM_GOOGLE, NOK_FROM_GOOGLE
     }
 
-    private EVENT  event;
-    private String logFile;
+    private EVENT         event;
+    private LocalDateTime date;
+    private String        logFile;
 
-    public LogMessage(EVENT event, String logFile)
+    public LogMessage(EVENT event, LocalDateTime date, String logFile)
     {
         super();
         this.event = event;
+        this.date = date;
         this.logFile = logFile;
     }
 
@@ -25,6 +29,16 @@ public class LogMessage
     public void setEvent(EVENT event)
     {
         this.event = event;
+    }
+
+    public LocalDateTime getDate()
+    {
+        return date;
+    }
+
+    public void setDate(LocalDateTime date)
+    {
+        this.date = date;
     }
 
     public String getLogFile()
