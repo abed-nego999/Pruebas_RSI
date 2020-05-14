@@ -9,11 +9,11 @@ import java.io.IOException;
 import java.nio.file.NoSuchFileException;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import es.esteban.process_log.db.LeeDbPushInfo;
 
 public class LeeLogs
 {
@@ -28,12 +29,13 @@ public class LeeLogs
     private static DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm:ss,SSS", new Locale("en"));
     private static Pattern           SENT_JMS           = Pattern.compile("(\\d{2} \\D{3} \\d{4} \\d{2}:\\d{2}:\\d{2},\\d{3}).*(?:Enviado mensaje a la cola JMS|-> IN mdb CRM:).*(?:idMensaje|id_mensaje)=(\\d+),");
     private static Pattern           RECEIVED_JMS       = Pattern.compile("(\\d{2} \\D{3} \\d{4} \\d{2}:\\d{2}:\\d{2},\\d{3}).*\\^\\^ UP mdb BEL: Mensaje_MDB_Banca.*idMensaje=(\\d+),");
-    private static Pattern           SENT_GOOGLE        = Pattern.compile("(\\d{2} \\D{3} \\d{4} \\d{2}:\\d{2}:\\d{2},\\d{3}).*Datos de Entrada.*id_mensaje=(\\d+),");
+    private static Pattern           SENT_GOOGLE        = Pattern.compile("(\\d{2} \\D{3} \\d{4} \\d{2}:\\d{2}:\\d{2},\\d{3}).*Datos de Entrada.*id_mensaje=(\\d+),.*?tipoAplicacion=(.*?),");
     private static Pattern           OK_GOOGLE          = Pattern.compile("(\\d{2} \\D{3} \\d{4} \\d{2}:\\d{2}:\\d{2},\\d{3}).*ENVIAR OK - El mensaje (\\d+) --");
     private static Pattern           NOK_GOOGLE         = Pattern.compile("(\\d{2} \\D{3} \\d{4} \\d{2}:\\d{2}:\\d{2},\\d{3}) ERROR.*?[Mm]ensaje(?: |: |=)(\\d+)");
     private static List<Message>     MESSAGES_HISTORY   = new ArrayList<Message>();
+    private static List<String>      TIPOS_PUSH         = Arrays.asList("A14", "ACT", "ANT", "BLS", "BVD", "CAS", "CCS", "CEM", "CES", "CEV", "CIE", "CIM", "CIP", "CIS", "CNO", "CNX", "CPO", "CRM", "CSB", "CSI", "CTE", "DRB", "DVL", "FCC", "FOF", "FOR", "FTD", "FTE", "FVT", "INC", "LIQ", "LQC", "NTE", "OGI", "PRB", "PTM", "RCH", "REM", "REX", "RRB", "SDP", "TCR", "TCT", "TDE", "TDT", "TDV", "TFC", "TFD", "TFF", "TFM", "TFR", "TJC", "TRA", "TRC", "TRM", "TTC", "UTI", "VTO");
 
-    public static void main(String[] args) throws FileNotFoundException, IOException
+    public static void main(String[] args) throws Exception
     {
         if (args == null || args.length < 1)
         {
@@ -69,13 +71,14 @@ public class LeeLogs
                 try
                 {
                     long messageId = -1L;
-                    LocalDateTime eventDate = null;
+                    long eventEpoch = -1L;
                     LogMessage.EVENT event = LogMessage.EVENT.NULL_EVENT;
 
                     Matcher m = SENT_JMS.matcher(logLine);
                     if (m.find())
                     {
                         event = LogMessage.EVENT.SENT_TO_JMS;
+                        // System.out.println("SENT_TO_JMS: " + logLine);
                     }
                     else
                     {
@@ -83,6 +86,7 @@ public class LeeLogs
                         if (m.find())
                         {
                             event = LogMessage.EVENT.RECEIVED_FROM_JMS;
+                            // System.out.println("RECEIVED_FROM_JMS: " + logLine);
                         }
                         else
                         {
@@ -90,6 +94,7 @@ public class LeeLogs
                             if (m.find())
                             {
                                 event = LogMessage.EVENT.SENT_TO_GOOGLE;
+                                // System.out.println("SENT_TO_GOOGLE: " + logLine);
                             }
                             else
                             {
@@ -97,6 +102,7 @@ public class LeeLogs
                                 if (m.find())
                                 {
                                     event = LogMessage.EVENT.OK_FROM_GOOGLE;
+                                    // System.out.println("OK_FROM_GOOGLE: " + logLine);
                                 }
                                 else
                                 {
@@ -104,6 +110,7 @@ public class LeeLogs
                                     if (m.find())
                                     {
                                         event = LogMessage.EVENT.NOK_FROM_GOOGLE;
+                                        // System.out.println("NOK_FROM_GOOGLE: " + logLine);
                                     }
                                 }
                             }
@@ -113,13 +120,13 @@ public class LeeLogs
                     if (event != LogMessage.EVENT.NULL_EVENT)
                     {
                         messageId = Long.parseLong(m.group(2));
-                        eventDate = LocalDateTime.parse(m.group(1), DATETIME_FORMATTER);
+                        eventEpoch = LocalDateTime.parse(m.group(1), DATETIME_FORMATTER).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
                     }
 
-                    if (messageId > -1L && eventDate != null && event != LogMessage.EVENT.NULL_EVENT)
+                    if (messageId > -1L && eventEpoch > -1L && event != LogMessage.EVENT.NULL_EVENT)
                     {
                         Message mensaje = getMessageById(messageId);
-                        mensaje.getEvents().add(new LogMessage(event, eventDate, logFile.getName()));
+                        mensaje.addEvent(new LogMessage(event, eventEpoch, logFile.getName()));
                     }
                 }
                 catch (Exception e)
@@ -205,6 +212,7 @@ public class LeeLogs
         if (mensaje == null)
         {
             mensaje = new Message(messageId);
+            MESSAGES_HISTORY.add(mensaje);
         }
 
         return mensaje;
@@ -346,30 +354,47 @@ public class LeeLogs
         }*/
     }
 
-    private static void generateCsvMedias(File outputFile) throws IOException
+    private static void generateCsvMedias(File outputFile) throws Exception
     {
         Map<Long, TiempoMedio> tiempos = new TreeMap<Long, TiempoMedio>();
+
+        long counter = 0;
+
+        LeeDbPushInfo dbPushInfo = new LeeDbPushInfo();
+
+        System.out.println("Líneas: " + MESSAGES_HISTORY.size());
+        List<Message> validMessages = new ArrayList<Message>();
         for (Message mensaje : MESSAGES_HISTORY)
         {
             if (mensaje.isFullCircuit() && mensaje.isOkFromGoogle())
             {
-                LocalDateTime fechaRecibidoJms = mensaje.getEventMessage(LogMessage.EVENT.RECEIVED_FROM_JMS).getDate();
-                LocalDateTime fechaEnviadoJms = mensaje.getEventMessage(LogMessage.EVENT.SENT_TO_JMS).getDate();
-                LocalDateTime fechaEnviado = mensaje.getEventMessage(LogMessage.EVENT.SENT_TO_GOOGLE).getDate();
-
-                long segundosJms = Duration.between(fechaRecibidoJms, fechaEnviadoJms).getSeconds();
-
-                long minutoEnviado = fechaEnviado.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() / 60000;
-                TiempoMedio tiempo = tiempos.get(minutoEnviado);
-                if (tiempo == null)
-                {
-                    tiempo = new TiempoMedio();
-                    tiempos.put(minutoEnviado, tiempo);
-                }
-
-                tiempo.addTiempoSegundos(segundosJms);
+                validMessages.add(mensaje);
             }
         }
+
+        dbPushInfo.fillMessageTypes(validMessages);
+
+        for (Message mensaje : validMessages)
+        {
+            long fechaRecibidoJms = mensaje.getEventMessage(LogMessage.EVENT.RECEIVED_FROM_JMS).getEpoch();
+            long fechaEnviadoJms = mensaje.getEventMessage(LogMessage.EVENT.SENT_TO_JMS).getEpoch();
+            // long fechaEnviado = mensaje.getEventMessage(LogMessage.EVENT.SENT_TO_GOOGLE).getEpoch();
+
+            long segundosJms = (long) (fechaRecibidoJms - fechaEnviadoJms) / 1000;
+
+            // long minutoEnviado = fechaEnviado / 60000;
+            long minutoEnviado = fechaEnviadoJms / 600000;
+            TiempoMedio tiempo = tiempos.get(minutoEnviado);
+            if (tiempo == null)
+            {
+                tiempo = new TiempoMedio();
+                tiempos.put(minutoEnviado, tiempo);
+            }
+
+            tiempo.addTiempoSegundos(segundosJms, mensaje.getTipo());
+        }
+
+        System.out.println("FIN: " + counter + " procesados");
 
         /* AQUÍ SE ESCRIBE EN EL FICHERO DESTINO */
         SimpleDateFormat sdf = new SimpleDateFormat("HH:mm");
@@ -377,16 +402,26 @@ public class LeeLogs
         FileOutputStream fileOutStream = null;
         try
         {
-            fileOutStream = new FileOutputStream(outputFile);
-            fileOutStream.write("MINUTO;TIEMPO MEDIO;TIEMPO MAXIMO;NUM MENSAJES\r\n".getBytes());
+            StringBuilder cabecera = new StringBuilder("MINUTO;TIEMPO MEDIO;TIEMPO MAXIMO;NUM MENSAJES");
+            for (String tipoPush : TIPOS_PUSH)
+            {
+                cabecera.append(";").append(tipoPush);
+            }
+            cabecera.append("\r\n");
 
+            fileOutStream = new FileOutputStream(outputFile);
+            fileOutStream.write(cabecera.toString().getBytes());
+
+            counter = 0;
+            System.out.println("Tiempos: " + tiempos.size());
             for (long minuto : tiempos.keySet())
             {
-                String sMinuto = sdf.format(new Date(minuto * 60000));
+                TiempoMedio tiempoMedio = tiempos.get(minuto);
+                String sMinuto = sdf.format(new Date(minuto * 600000));
                 StringBuilder sb = new StringBuilder();
                 sb.append(sMinuto).append(";");
-                sb.append(String.valueOf(df.format(tiempos.get(minuto).getMediaMinutos()))).append(";");
-                float maxMinutos = tiempos.get(minuto).getMaxMinutos();
+                sb.append(String.valueOf(df.format(tiempoMedio.getMediaMinutos()))).append(";");
+                float maxMinutos = tiempoMedio.getMaxMinutos();
                 if (maxMinutos > 0)
                 {
                     sb.append(String.valueOf(df.format(maxMinutos))).append(";");
@@ -395,9 +430,29 @@ public class LeeLogs
                 {
                     sb.append("").append(";");
                 }
-                sb.append(String.valueOf(tiempos.get(minuto).getOccurences())).append("\r\n");
+                sb.append(String.valueOf(tiempoMedio.getOccurences()));
+
+                Map<String, Long> occurencesByType = tiempoMedio.getOccurencesByType();
+                for (String tipoPush : TIPOS_PUSH)
+                {
+                    sb.append(";");
+                    if (occurencesByType.containsKey(tipoPush))
+                    {
+                        sb.append(occurencesByType.get(tipoPush));
+                    }
+                }
+                sb.append("\r\n");
+
                 fileOutStream.write(sb.toString().getBytes());
+
+                counter++;
+                if ((counter % 100) == 0)
+                {
+                    System.out.println("Contador tiempos: " + counter);
+                }
             }
+
+            System.out.println("FIN Contador tiempos: " + counter);
 
             fileOutStream.flush();
             fileOutStream.close();

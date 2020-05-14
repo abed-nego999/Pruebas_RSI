@@ -8,6 +8,11 @@ public class Message
     private long             id;
     private String           tipo;
     private List<LogMessage> events;
+    private long             sentJms        = 0;
+    private long             receivedJms    = 0;
+    private long             sentGoogle     = 0;
+    private long             responseGoogle = 0;
+    private boolean          okFromGoogle   = false;
 
     public Message(long id)
     {
@@ -35,7 +40,7 @@ public class Message
         this.tipo = tipo;
     }
 
-    public List<LogMessage> getEvents()
+    private List<LogMessage> getEvents()
     {
         if (events == null)
         {
@@ -44,9 +49,33 @@ public class Message
         return events;
     }
 
-    public void setEvents(List<LogMessage> events)
+    public void addEvent(LogMessage event)
     {
-        this.events = events;
+        switch (event.getEvent())
+        {
+            case SENT_TO_JMS:
+                sentJms++;
+                break;
+            case NOK_FROM_GOOGLE:
+                responseGoogle++;
+                break;
+            case NULL_EVENT:
+                break;
+            case OK_FROM_GOOGLE:
+                responseGoogle++;
+                okFromGoogle = true;
+                break;
+            case RECEIVED_FROM_JMS:
+                receivedJms++;
+                break;
+            case SENT_TO_GOOGLE:
+                sentGoogle++;
+                break;
+            default:
+                break;
+        }
+
+        getEvents().add(event);
     }
 
     public LogMessage getEventMessage(LogMessage.EVENT event)
@@ -56,23 +85,16 @@ public class Message
 
     public boolean isOkFromGoogle()
     {
-        return isEvent(LogMessage.EVENT.OK_FROM_GOOGLE, false);
+        return okFromGoogle;
     }
 
     public boolean isFullCircuit()
     {
-        boolean isSentToJms = isEvent(LogMessage.EVENT.SENT_TO_JMS, true);
-        boolean isReceivedFromJms = isEvent(LogMessage.EVENT.RECEIVED_FROM_JMS, true);
-        boolean isSentToGoogle = isEvent(LogMessage.EVENT.SENT_TO_GOOGLE, true);
-        boolean isResponseFromGoogle = isEvent(LogMessage.EVENT.NOK_FROM_GOOGLE, true)
-                || isEvent(LogMessage.EVENT.OK_FROM_GOOGLE, true);
+        boolean isSentToJms = (sentJms == 1);
+        boolean isReceivedFromJms = (receivedJms == 1);
+        boolean isSentToGoogle = (sentGoogle == 1);
+        boolean isResponseFromGoogle = (responseGoogle == 1);
 
         return isSentToJms && isReceivedFromJms && isSentToGoogle && isResponseFromGoogle;
-    }
-
-    private boolean isEvent(LogMessage.EVENT event, boolean limitToOne)
-    {
-        long count = events.stream().filter(logMessage -> event == logMessage.getEvent()).count();
-        return count > 0 && (count == 1 || !limitToOne);
     }
 }

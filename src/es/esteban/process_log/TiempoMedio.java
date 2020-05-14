@@ -1,16 +1,20 @@
 package es.esteban.process_log;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class TiempoMedio
 {
-    private int  ocurrencias;
-    private int  tiempoTotal;
-    private long maxTiempo = 0;
+    private long              ocurrencias;
+    private long              tiempoTotal;
+    private long              maxTiempo        = 0;
+    private Map<String, Long> occurencesByType = new HashMap<String, Long>();
 
     public TiempoMedio()
     {
     }
 
-    public void addTiempoSegundos(long segundos)
+    public void addTiempoSegundos(long segundos, String messageType)
     {
         ocurrencias++;
         tiempoTotal += segundos;
@@ -18,11 +22,18 @@ public class TiempoMedio
         {
             maxTiempo = segundos;
         }
+
+        if (occurencesByType.get(messageType) == null)
+        {
+            occurencesByType.put(messageType, 0L);
+        }
+        long typeOccurences = occurencesByType.get(messageType);
+        occurencesByType.put(messageType, typeOccurences + 1);
     }
 
     public float getMediaMinutos()
     {
-        int tiempoMedioSegundos = (int) tiempoTotal / ocurrencias;
+        long tiempoMedioSegundos = (long) tiempoTotal / ocurrencias;
         return (float) tiempoMedioSegundos / 60;
     }
 
@@ -31,8 +42,14 @@ public class TiempoMedio
         return (float) maxTiempo / 60;
     }
 
-    public int getOccurences()
+    public long getOccurences()
     {
         return ocurrencias;
     }
+
+    public Map<String, Long> getOccurencesByType()
+    {
+        return occurencesByType;
+    }
+
 }
