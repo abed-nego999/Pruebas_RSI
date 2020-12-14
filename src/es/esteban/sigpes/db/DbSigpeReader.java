@@ -7,7 +7,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.LocalDate;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -18,10 +18,10 @@ public class DbSigpeReader
 {
     private Connection                     conn;
 
-    private static final String            QUERY_SIGPES      = "SLEECT * FROM SIGPES S WHERE MES_CONTABLE = ? ORDER BY ID, FECHA_ENTRADA";
-    private static final String            UPDATE_SIGPE_DIAS = "UPDATE sigpe.sigpes SET dias = ? WHERE id = ? AND fecha_entrada = ?";
+    private static final String            QUERY_SIGPES      = "select a.mes_contable, a.id_sigpe, s.titulo, a.fecha_entrada, a.fecha_salida, a.dias, a.tecnico_drago, a.tecnico_rsi, a.funcional_rsi, a.comentario from sigpes s inner join actuacion_sigpe a on s.id = a.id_sigpe where mes_contable = ?";
+    private static final String            UPDATE_SIGPE_DIAS = "UPDATE ACTUACION_SIGPE SET dias = ? WHERE id_sigpe = ? AND fecha_entrada = ?";
     private static final String            COL_MES_CONTABLE  = "MES_CONTABLE";
-    private static final String            COL_ID            = "ID";
+    private static final String            COL_ID            = "ID_SIGPE";
     private static final String            COL_TITULO        = "TITULO";
     private static final String            COL_FECHA_ENTRADA = "FECHA_ENTRADA";
     private static final String            COL_FECHA_SALIDA  = "FECHA_SALIDA";
@@ -39,8 +39,9 @@ public class DbSigpeReader
 
     }
 
-    public Set<DbSigpe> getAllSigpes(LocalDate mesContable)
+    public Set<DbSigpe> getAllSigpes(Date mesContable)
     {
+        System.out.println("Entra en getAllSigpes(" + mesContable + ")");
         Set<DbSigpe> sigpes = new HashSet<DbSigpe>();
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -50,7 +51,7 @@ public class DbSigpeReader
         {
             conn = getConnection();
             pstmt = getConnection().prepareStatement(QUERY_SIGPES);
-            pstmt.setDate(1, (Date) Date.from(mesContable.atStartOfDay(ZoneId.systemDefault()).toInstant()));
+            pstmt.setDate(1, mesContable);
             rs = pstmt.executeQuery();
 
             while (rs.next())
@@ -86,7 +87,7 @@ public class DbSigpeReader
             pstmt = getConnection().prepareStatement(UPDATE_SIGPE_DIAS);
             pstmt.setInt(1, dias);
             pstmt.setString(2, id);
-            pstmt.setDate(3, (Date) Date.from(fechaEntrada.atZone(ZoneId.systemDefault()).toInstant()));
+            pstmt.setTimestamp(3, Timestamp.valueOf(fechaEntrada));
             int rowCount = pstmt.executeUpdate();
 
             if (rowCount == 1)
@@ -98,7 +99,7 @@ public class DbSigpeReader
             {
                 result = false;
                 conn.rollback();
-                throw new SQLException("Error: El update ha afectado a [" + rowCount + "] filas");
+                throw new SQLException("Error: El update de la sigpe " + id + " con fecha de entrada " + fechaEntrada + " ha afectado a [" + rowCount + "] filas");
             }
         }
         catch (SQLException e)
@@ -125,7 +126,7 @@ public class DbSigpeReader
     {
         if (conn == null || conn.isClosed())
         {
-            conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/sigpe", "root", "root");
+            conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/sigpes", "root", "root");
         }
 
         return conn;
@@ -138,8 +139,8 @@ public class DbSigpeReader
         Date mesContable = null;
         String id = null;
         String titulo = null;
-        Date fechaEntrada = null;
-        Date fechaSalida = null;
+        Timestamp fechaEntrada = null;
+        Timestamp fechaSalida = null;
         int dias = -1;
         String tecnicoDrago = null;
         String tecnicoRsi = null;
@@ -149,8 +150,8 @@ public class DbSigpeReader
         mesContable = rs.getDate(COL_MES_CONTABLE);
         id = rs.getString(COL_ID);
         titulo = rs.getString(COL_TITULO);
-        fechaEntrada = rs.getDate(COL_FECHA_ENTRADA);
-        fechaSalida = rs.getDate(COL_FECHA_SALIDA);
+        fechaEntrada = rs.getTimestamp(COL_FECHA_ENTRADA);
+        fechaSalida = rs.getTimestamp(COL_FECHA_SALIDA);
         dias = rs.getInt(COL_DIAS);
         tecnicoDrago = rs.getString(COL_TECNICO_DRAGO);
         tecnicoRsi = rs.getString(COL_TECNICO_RSI);
@@ -159,7 +160,7 @@ public class DbSigpeReader
 
         if (mesContable != null)
         {
-            sigpe.setMesContable(mesContable.toInstant().atZone(ZoneId.systemDefault()).toLocalDate());
+            sigpe.setMesContable(mesContable.toLocalDate());
         }
         sigpe.setId(id);
         sigpe.setTitulo(titulo);

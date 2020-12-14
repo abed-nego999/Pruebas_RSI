@@ -63,4 +63,10 @@ public class CalendarioMadrid2020 extends A_CalendarioLaboral
         return weekendDays;
     }
 
+    @Override
+    protected int getHorasAlDia()
+    {
+        return 8;
+    }
+
 }

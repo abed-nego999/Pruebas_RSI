@@ -1,25 +1,25 @@
 package es.esteban.sigpes;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.Month;
-import java.time.format.DateTimeFormatter;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Set;
 import es.esteban.sigpes.calendario.CalendarioMadrid2020;
+import es.esteban.sigpes.db.DbSigpe;
+import es.esteban.sigpes.db.DbSigpeReader;
 
 public class GeneraInformes
 {
-    private LocalDate mesContable;
+    private Date          mesContable;
+    private DbSigpeReader reader = new DbSigpeReader();
 
     public static void main(String[] args) throws Exception
     {
-        LocalDate date = LocalDate.parse("01/" + args[0], DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-
-        GeneraInformes generaInformes = new GeneraInformes(date);
+        GeneraInformes generaInformes = new GeneraInformes(new SimpleDateFormat("dd/MM/yyyy").parse("01/" + args[0]));
 
         generaInformes.getInforme();
     }
 
-    public GeneraInformes(LocalDate mesContable)
+    public GeneraInformes(Date mesContable)
     {
         this.mesContable = mesContable;
     }
@@ -28,9 +28,14 @@ public class GeneraInformes
     {
         CalendarioMadrid2020 calendario = new CalendarioMadrid2020();
 
-        LocalDateTime fechaInicial = LocalDateTime.of(2020, Month.APRIL, 30, 8, 0);
-        LocalDateTime fechaFinal = LocalDateTime.of(2020, Month.MAY, 4, 8, 0);
-        long horas = calendario.getHorasEntreFechas(fechaInicial, fechaFinal);
-        System.out.println("Horas: " + horas);
+        System.out.println("Mes Contable: " + mesContable);
+
+        Set<DbSigpe> sigpes = reader.getAllSigpes(new java.sql.Date(mesContable.getTime()));
+        for (DbSigpe sigpe : sigpes)
+        {
+            int dias = calendario.getDiasEntreFechas(sigpe.getFechaEntrada(), sigpe.getFechaSalida());
+            reader.updateSigpeDias(sigpe.getId(), sigpe.getFechaEntrada(), dias);
+            System.out.println("SIGPE: " + sigpe.getId() + " -> " + dias + " días");
+        }
     }
 }

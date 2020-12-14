@@ -43,6 +43,13 @@ public abstract class A_CalendarioLaboral
         return horasTranscurridas;
     }
 
+    public int getDiasEntreFechas(LocalDateTime fechaInicial, LocalDateTime fechaFinal)
+    {
+        long horas = getHorasEntreFechas(fechaInicial, fechaFinal);
+
+        return Math.round((float) horas / getHorasAlDia());
+    }
+
     protected LocalDateTime getFechaHoraReal(LocalDateTime fechaInicial)
     {
         LocalDateTime result;
@@ -114,4 +121,6 @@ public abstract class A_CalendarioLaboral
     protected abstract List<LocalDate> getHolidays();
 
     protected abstract List<DayOfWeek> getWeekendDays();
+
+    protected abstract int getHorasAlDia();
 }
